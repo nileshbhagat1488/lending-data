@@ -20,18 +20,31 @@ if not isMount:
 
 # COMMAND ----------
 
-dbutils.fs.ls('/mnt/source')
-
-
-
-# COMMAND ----------
-
 lending_raw_df = spark.read.format('csv').option('header',True).option('inferschema',True).load('/mnt/source/lending_raw_data.csv')
 
 # COMMAND ----------
 
-status_df = lending_raw_df.filter(lending_raw_df['loan_status'].isNull()).count()
-display(status_df)
+# read the status lookup file to load only relevent data into bronze layer
+loan_status_lkp = spark.read.format('csv').option('header',True).option('inferschema',True).load('/mnt/source/loan_status.csv')
+loan_status_lkp.createOrReplaceTempView('loan_status')
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC
+
+# COMMAND ----------
+
+lending_raw_df.createOrReplaceTempView('lending_data')
+invalid_records_df = spark.sql("select * from lending_data where loan_status not in (select * from loan_status) or loan_status is  null")
+valid_records_df = spark.sql("select * from lending_data where loan_status is not null")
+print(invalid_records_df.count())
+
+# COMMAND ----------
+
+# write the invalid records and valid records
+invalid_records_df.write.mode('overwrite').option('header',True).format('csv').save('/mnt/source/invalid_data/')
+valid_records_df.write.mode('overwrite').option('header',True).save('/mnt/source/Bronze/')
 
 # COMMAND ----------
 
